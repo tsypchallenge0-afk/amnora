@@ -44,8 +44,8 @@ All grounds and power domains must follow the exact breakout and board specifica
 
 With the PlatformIO serial monitor at 115200 baud:
 
-- Send `c` while the wearer stands in a comfortable neutral posture to capture the relative IMU offset.
-- Send `z` while both instrumented handles are unloaded to tare each ready HX711 channel.
+- Send `c` while the wearer stands in a comfortable neutral posture and remains still for about 2 seconds. The firmware averages 40 paired IMU samples and rejects an unstable capture.
+- Send `z` while each configured instrumented handle is unloaded. The firmware averages 16 ready HX711 samples per configured channel and reports completion or timeout.
 - JSON telemetry includes raw HX711 counts for calibration. Use the known-mass formula in [hardware.md](hardware.md), then enter a separate counts-per-kilogram factor for each handle in `firmware/include/config.h`.
 
 The SOS trigger is accepted only from the configured physical button pins. The public firmware defaults leave those pins unset, and the public emergency phone number is a non-routable placeholder.

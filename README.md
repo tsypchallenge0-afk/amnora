@@ -1,12 +1,18 @@
 # AGRI-SAFE
 
-### A wearable workload-awareness and emergency-support system for agricultural work
+**A wearable workload-awareness and emergency-support system for agricultural work**
 
 AGRI-SAFE is a screen-free wearable system concept for women working in Tunisia's rural and peri-urban agricultural economy. It brings together posture sensing, load measurement through purpose-built carrying handles, ambient sensing, local feedback, and a physical SOS interface.
 
 The system is designed around the **LILYGO T-Call V1.4 with ESP32 and integrated SIM800L**. Measurements are processed locally. The modem is reserved for emergency SMS; the design does not require a phone app, cloud service, display, GPS, or machine-learning model.
 
 > **Scope:** AGRI-SAFE provides ergonomic workload awareness and a way to request assistance. It is not a medical device, does not diagnose illness or predict injury, and cannot guarantee that an SMS will be delivered or acted upon.
+
+[Architecture](docs/architecture.md) · [Hardware](docs/hardware.md) · [Wiring](docs/wiring.md) · [Firmware](firmware/) · [Diagrams](diagrams/)
+
+### Project status
+
+The repository contains the ESP32 firmware modules, system documentation, and design diagrams. The public configuration deliberately leaves optional peripheral GPIOs unassigned, load-cell scale factors at zero, and the emergency number as a placeholder. Complete the board-specific setup below before using the firmware with connected hardware.
 
 ---
 
@@ -137,22 +143,27 @@ See [`docs/architecture.md`](docs/architecture.md) for the data path and state t
 
 At 115200 baud, the serial monitor accepts:
 
-- `c` - capture the relative upper-back/pelvis reference while standing comfortably neutral.
-- `z` - tare each ready handle channel while both handles are unloaded.
+- `c` - collect 40 paired IMU samples (about 2 seconds) for the relative upper-back/pelvis reference. Stand comfortably neutral and hold still; the calibration is rejected if the relative angle varies too much.
+- `z` - collect 16 samples per configured HX711 channel and average them for tare. Keep each instrumented handle unloaded until the serial monitor reports completion.
 - `?` - print the available commands.
 
-Telemetry is emitted as one JSON object per line. Raw HX711 counts are included so the two handle channels can be calibrated independently. Compute `counts_per_kg = (loaded_counts - tare_counts) / known_mass_kg`, then set the left and right constants in `firmware/include/config.h`. A zero calibration factor keeps that channel's kilogram value unavailable.
+Calibration runs inside the normal scheduler, so sensor acquisition and SOS processing continue while samples are collected. If calibration times out or the wearer moves during neutral capture, correct the condition and repeat it.
+
+Telemetry is emitted as one JSON object per line. Raw HX711 counts are included so the two handle channels can be calibrated independently. After tare, place a known reference mass on one handle at a time and calculate `counts_per_kg = (loaded_counts - tare_counts) / known_mass_kg`. Set separate left and right constants in `firmware/include/config.h`. A zero calibration factor keeps that channel's kilogram value unavailable.
 
 ## Build and configure
 
 1. Install VS Code and the PlatformIO extension.
 2. Open the `firmware/` directory as a PlatformIO project.
-3. Confirm the board is the **SIM800L/IP5306 T-Call V1.4** variant, not a visually similar revision or LTE variant.
-4. Review `firmware/include/pins.h` and assign only exposed, unused pins supported by the board schematic and the actual breakout modules.
-5. Set the two HX711 calibration factors only after calibration with known reference loads. Do not reuse a factor between handles without evidence.
-6. Set task-specific alert thresholds in `firmware/include/config.h`.
-7. Set the emergency number locally. Keep personal phone numbers and SIM credentials out of public commits.
-8. Build and flash using the PlatformIO environment in `firmware/platformio.ini`.
+3. Select the `ttgo-t-call-v1_4` environment from `firmware/platformio.ini`.
+4. Confirm the board is the **SIM800L/IP5306 T-Call V1.4** variant, not a visually similar revision or LTE variant.
+5. Review `firmware/include/pins.h` and assign only exposed, unused pins supported by the board schematic and the actual breakout modules.
+6. Set the two HX711 calibration factors only after calibration with known reference loads. Do not reuse a factor between handles without evidence.
+7. Set task-specific alert thresholds in `firmware/include/config.h`.
+8. Set the emergency number locally. Keep personal phone numbers and SIM credentials out of public commits.
+9. Build and flash using PlatformIO after the board and pin configuration have been reviewed.
+
+The sensor bus uses GPIO 21/22, which are also used by the T-Call's IP5306 power controller. Review the shared-bus pull-ups, voltage levels, addresses, and total capacitance in [hardware.md](docs/hardware.md) before connecting the sensor breakouts.
 
 The SIM800L path depends on a valid SIM, cellular registration, operator support for 2G in the work area, and adequate power during transmission. The example contact number is intentionally invalid until locally configured.
 

@@ -25,12 +25,37 @@ bool networkRequestActive = false;
 bool smsRequestActive = false;
 bool previousPostureReminder = false;
 bool previousLoadReminder = false;
+CalibrationStatus previousNeutralCalibrationStatus = CalibrationStatus::Idle;
+CalibrationStatus previousTareCalibrationStatus = CalibrationStatus::Idle;
 constexpr char kEmergencyMessage[] =
     "AGRI-SAFE emergency request. Please contact the worker. This device has no GPS location.";
 
 void printHelp() {
-  Serial.println(F("Commands: c = capture neutral posture; z = tare unloaded handles; ? = help"));
+  Serial.println(F("Commands: c = average neutral posture; z = average tare unloaded handles; ? = help"));
+  Serial.println(F("Calibration collects multiple samples and continues servicing SOS and sensors."));
   Serial.println(F("SOS is activated only by the configured physical button."));
+}
+
+void reportCalibrationChanges() {
+  const CalibrationStatus neutralStatus = sensors.neutralCalibrationStatus();
+  if (neutralStatus != previousNeutralCalibrationStatus) {
+    if (neutralStatus == CalibrationStatus::Complete) {
+      Serial.println(F("Neutral calibration complete."));
+    } else if (neutralStatus == CalibrationStatus::Failed) {
+      Serial.println(F("Neutral calibration failed: hold still and retry when both IMUs are available."));
+    }
+    previousNeutralCalibrationStatus = neutralStatus;
+  }
+
+  const CalibrationStatus tareStatus = sensors.tareCalibrationStatus();
+  if (tareStatus != previousTareCalibrationStatus) {
+    if (tareStatus == CalibrationStatus::Complete) {
+      Serial.println(F("Handle tare complete."));
+    } else if (tareStatus == CalibrationStatus::Failed) {
+      Serial.println(F("Handle tare failed or timed out; keep both handles unloaded and retry."));
+    }
+    previousTareCalibrationStatus = tareStatus;
+  }
 }
 
 void reportHealth() {
@@ -75,19 +100,19 @@ void reportSnapshot(uint32_t nowMs) {
                 latest.loadReminder ? "true" : "false");
 }
 
-void handleSerialCommand(char command) {
+void handleSerialCommand(char command, uint32_t nowMs) {
   switch (command) {
     case 'c':
     case 'C':
-      Serial.println(sensors.captureNeutral()
-          ? F("Neutral posture captured.")
-          : F("Neutral calibration unavailable: both IMUs need valid readings."));
+      Serial.println(sensors.startNeutralCalibration(nowMs)
+          ? F("Neutral calibration started. Stand comfortably neutral and hold still for about 2 seconds.")
+          : F("Could not start neutral calibration: check IMU availability or an active calibration."));
       break;
     case 'z':
     case 'Z':
-      Serial.println(sensors.tareHandles()
-          ? F("Tare captured for ready HX711 channels. Ensure the handles are unloaded." )
-          : F("No configured HX711 channel is ready for tare."));
+      Serial.println(sensors.startTareCalibration(nowMs)
+          ? F("Handle tare started. Keep the configured handles unloaded until completion.")
+          : F("Could not start tare: no HX711 pins are configured or tare is already active."));
       break;
     case '?':
       printHelp();
@@ -97,8 +122,10 @@ void handleSerialCommand(char command) {
   }
 }
 
-void processSerial() {
-  while (Serial.available() > 0) handleSerialCommand(static_cast<char>(Serial.read()));
+void processSerial(uint32_t nowMs) {
+  while (Serial.available() > 0) {
+    handleSerialCommand(static_cast<char>(Serial.read()), nowMs);
+  }
 }
 
 void processButtons(uint32_t nowMs) {
@@ -196,7 +223,7 @@ void setup() {
 
 void loop() {
   const uint32_t nowMs = millis();
-  processSerial();
+  processSerial(nowMs);
   processButtons(nowMs);
   feedback.update(nowMs);
   modem.update(nowMs);
@@ -216,4 +243,5 @@ void loop() {
     lastReportMs = nowMs;
     reportSnapshot(nowMs);
   }
+  reportCalibrationChanges();
 }

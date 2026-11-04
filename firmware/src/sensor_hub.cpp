@@ -52,6 +52,8 @@ WorkloadSnapshot SensorHub::update(uint32_t nowMs) {
   updateImuPair(nowMs);
   updateEnvironment(nowMs);
   updateLoads(nowMs);
+  updateNeutralCalibration(nowMs);
+  updateTareCalibration(nowMs);
   latest_.pulseBpm = pulse_.update(nowMs);
   latest_.health.pulse = pulseReady_;
   return latest_;
@@ -93,6 +95,15 @@ bool SensorHub::updateImuPair(uint32_t nowMs) {
       upperGyro.gyro.y * kRadiansToDegrees, nowMs);
   pelvisPitchDeg_ = pelvisFilter_.update(pelvisAccelPitch,
       pelvisGyro.gyro.y * kRadiansToDegrees, nowMs);
+
+  if (neutralCalibrationStatus_ == CalibrationStatus::Collecting) {
+    const float relativePitch = upperPitchDeg_ - pelvisPitchDeg_;
+    neutralUpperSum_ += upperPitchDeg_;
+    neutralPelvisSum_ += pelvisPitchDeg_;
+    neutralRelativeSum_ += relativePitch;
+    neutralRelativeSquareSum_ += relativePitch * relativePitch;
+    ++neutralCalibrationCount_;
+  }
 
   if (!postureCalibration_.ready()) {
     latest_.relativeTrunkAngleDeg.valid = false;
@@ -141,6 +152,11 @@ void SensorHub::updateLoads(uint32_t nowMs) {
     } else {
       latest_.leftHandleLoadKg.valid = false;
     }
+    if (tareCalibrationStatus_ == CalibrationStatus::Collecting &&
+        tareLeftActive_ && tareLeftCount_ < config::LOAD_TARE_SAMPLES) {
+      tareLeftSum_ += static_cast<int64_t>(raw);
+      ++tareLeftCount_;
+    }
   }
   if (rightLoadReady_ && rightHx711_.is_ready()) {
     const long raw = rightHx711_.read();
@@ -150,6 +166,11 @@ void SensorHub::updateLoads(uint32_t nowMs) {
       latest_.rightHandleLoadKg = {rightLoad_.kilograms(raw), nowMs, true};
     } else {
       latest_.rightHandleLoadKg.valid = false;
+    }
+    if (tareCalibrationStatus_ == CalibrationStatus::Collecting &&
+        tareRightActive_ && tareRightCount_ < config::LOAD_TARE_SAMPLES) {
+      tareRightSum_ += static_cast<int64_t>(raw);
+      ++tareRightCount_;
     }
   }
   latest_.health.leftLoadCell = leftLoadReady_ && lastLeftLoadMs_ != 0 &&
@@ -168,20 +189,77 @@ void SensorHub::updateLoads(uint32_t nowMs) {
   }
 }
 
-bool SensorHub::captureNeutral() {
+bool SensorHub::startNeutralCalibration(uint32_t nowMs) {
+  if (neutralCalibrationStatus_ == CalibrationStatus::Collecting) return false;
   if (!latest_.health.upperImu || !latest_.health.pelvisImu) return false;
-  return postureCalibration_.captureNeutral(upperPitchDeg_, pelvisPitchDeg_, true);
+  neutralCalibrationCount_ = 0;
+  neutralUpperSum_ = 0.0f;
+  neutralPelvisSum_ = 0.0f;
+  neutralRelativeSum_ = 0.0f;
+  neutralRelativeSquareSum_ = 0.0f;
+  neutralCalibrationStartedMs_ = nowMs;
+  neutralCalibrationStatus_ = CalibrationStatus::Collecting;
+  return true;
 }
 
-bool SensorHub::tareHandles() {
-  bool taredAtLeastOne = false;
-  if (leftLoadReady_ && leftHx711_.is_ready()) {
-    leftLoad_.tare(leftHx711_.read());
-    taredAtLeastOne = true;
+bool SensorHub::startTareCalibration(uint32_t nowMs) {
+  if (tareCalibrationStatus_ == CalibrationStatus::Collecting) return false;
+  tareLeftActive_ = leftLoadReady_;
+  tareRightActive_ = rightLoadReady_;
+  if (!tareLeftActive_ && !tareRightActive_) return false;
+  tareLeftCount_ = 0;
+  tareRightCount_ = 0;
+  tareLeftSum_ = 0;
+  tareRightSum_ = 0;
+  tareCalibrationStartedMs_ = nowMs;
+  tareCalibrationStatus_ = CalibrationStatus::Collecting;
+  return true;
+}
+
+void SensorHub::updateNeutralCalibration(uint32_t nowMs) {
+  if (neutralCalibrationStatus_ != CalibrationStatus::Collecting) return;
+  if (static_cast<uint32_t>(nowMs - neutralCalibrationStartedMs_) >=
+      config::CALIBRATION_TIMEOUT_MS) {
+    neutralCalibrationStatus_ = CalibrationStatus::Failed;
+    return;
   }
-  if (rightLoadReady_ && rightHx711_.is_ready()) {
-    rightLoad_.tare(rightHx711_.read());
-    taredAtLeastOne = true;
+  if (neutralCalibrationCount_ < config::NEUTRAL_CALIBRATION_SAMPLES) return;
+
+  const float count = static_cast<float>(neutralCalibrationCount_);
+  const float meanRelative = neutralRelativeSum_ / count;
+  const float variance = neutralRelativeSquareSum_ / count - meanRelative * meanRelative;
+  const float nonnegativeVariance = variance < 0.0f && variance > -0.001f
+      ? 0.0f : variance;
+  if (!isfinite(nonnegativeVariance) || nonnegativeVariance < 0.0f ||
+      sqrtf(nonnegativeVariance) > config::NEUTRAL_CALIBRATION_MAX_STDDEV_DEG) {
+    neutralCalibrationStatus_ = CalibrationStatus::Failed;
+    return;
   }
-  return taredAtLeastOne;
+
+  const bool captured = postureCalibration_.captureNeutral(
+      neutralUpperSum_ / count, neutralPelvisSum_ / count, true);
+  neutralCalibrationStatus_ = captured ? CalibrationStatus::Complete
+                                       : CalibrationStatus::Failed;
+}
+
+void SensorHub::updateTareCalibration(uint32_t nowMs) {
+  if (tareCalibrationStatus_ != CalibrationStatus::Collecting) return;
+  if (static_cast<uint32_t>(nowMs - tareCalibrationStartedMs_) >=
+      config::CALIBRATION_TIMEOUT_MS) {
+    tareCalibrationStatus_ = CalibrationStatus::Failed;
+    return;
+  }
+  const bool leftComplete = !tareLeftActive_ ||
+      tareLeftCount_ >= config::LOAD_TARE_SAMPLES;
+  const bool rightComplete = !tareRightActive_ ||
+      tareRightCount_ >= config::LOAD_TARE_SAMPLES;
+  if (!leftComplete || !rightComplete) return;
+
+  if (tareLeftActive_) {
+    leftLoad_.tare(static_cast<long>(tareLeftSum_ / tareLeftCount_));
+  }
+  if (tareRightActive_) {
+    rightLoad_.tare(static_cast<long>(tareRightSum_ / tareRightCount_));
+  }
+  tareCalibrationStatus_ = CalibrationStatus::Complete;
 }

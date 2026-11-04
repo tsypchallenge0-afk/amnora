@@ -57,8 +57,9 @@ flowchart TB
 - The main scheduler requests a sensor frame every 50 ms.
 - The SHT31 is read once per second and marked stale if no fresh value is available.
 - Two MPU6050 devices use addresses `0x68` and `0x69`; the pelvis unit needs the alternate AD0 address.
-- Enter `c` in the serial monitor while standing comfortably neutral to capture the relative IMU reference.
-- Enter `z` with the instrumented handles unloaded to capture tare. Each HX711 channel also needs its own calibrated counts-per-kilogram constant.
+- Enter `c` in the serial monitor while standing comfortably neutral. The firmware averages 40 paired IMU samples (about 2 seconds at the configured sample rate) and rejects the capture if relative-angle variation exceeds the configured stability limit.
+- Enter `z` with the instrumented handles unloaded. Each configured HX711 channel averages 16 ready samples for tare; a missing stream times out instead of silently recording a partial tare.
+- Calibration runs in the normal scheduler and has a bounded timeout. The serial monitor reports completion or failure. Each HX711 channel still needs its own calibrated counts-per-kilogram constant after tare.
 - The MAX30102 sample rate is configured to 100 Hz. The pulse interval detector rejects missing contact, implausible intervals, and inconsistent short interval windows. It cannot reliably identify every motion artifact because the design has no wrist-mounted motion sensor.
 
 ## SOS sequence
