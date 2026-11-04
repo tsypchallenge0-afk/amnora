@@ -60,8 +60,14 @@ WorkloadSnapshot SensorHub::update(uint32_t nowMs) {
 bool SensorHub::updateImuPair(uint32_t nowMs) {
   sensors_event_t upperAccel, upperGyro, upperTemp;
   sensors_event_t pelvisAccel, pelvisGyro, pelvisTemp;
-  const bool upperOk = upperReady_ && upperImu_.getEvent(&upperAccel, &upperGyro, &upperTemp);
-  const bool pelvisOk = pelvisReady_ && pelvisImu_.getEvent(&pelvisAccel, &pelvisGyro, &pelvisTemp);
+  const bool upperRead = upperReady_ && upperImu_.getEvent(&upperAccel, &upperGyro, &upperTemp);
+  const bool pelvisRead = pelvisReady_ && pelvisImu_.getEvent(&pelvisAccel, &pelvisGyro, &pelvisTemp);
+  const bool upperOk = upperRead && isfinite(upperAccel.acceleration.x) &&
+      isfinite(upperAccel.acceleration.y) && isfinite(upperAccel.acceleration.z) &&
+      isfinite(upperGyro.gyro.y);
+  const bool pelvisOk = pelvisRead && isfinite(pelvisAccel.acceleration.x) &&
+      isfinite(pelvisAccel.acceleration.y) && isfinite(pelvisAccel.acceleration.z) &&
+      isfinite(pelvisGyro.gyro.y);
   latest_.health.upperImu = upperOk;
   latest_.health.pelvisImu = pelvisOk;
 
