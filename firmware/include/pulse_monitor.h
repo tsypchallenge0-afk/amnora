@@ -24,9 +24,12 @@ class PulseMonitor {
   float amplitudeEnvelope_ = 0.0f;
   float previousSignal_ = 0.0f;
   uint32_t previousBeatMs_ = 0;
+  uint32_t lastValidBeatMs_ = 0;
   uint32_t lastContactMs_ = 0;
   bool hasBaseline_ = false;
   bool aboveBeatThreshold_ = false;
   bool available_ = false;
   bool contactSeen_ = false;
+  bool signalQualityGood_ = false;
+  bool validBeatSeen_ = false;
 };

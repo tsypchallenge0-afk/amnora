@@ -8,7 +8,7 @@ The system is designed around the **LILYGO T-Call V1.4 with ESP32 and integrated
 
 > **Scope:** AGRI-SAFE provides ergonomic workload awareness and a way to request assistance. It is not a medical device, does not diagnose illness or predict injury, and cannot guarantee that an SMS will be delivered or acted upon.
 
-[Architecture](docs/architecture.md) · [Hardware](docs/hardware.md) · [Wiring](docs/wiring.md) · [Firmware](firmware/) · [Diagrams](diagrams/)
+[Architecture](docs/architecture.md) | [Hardware](docs/hardware.md) | [Wiring](docs/wiring.md) | [Firmware](firmware/) | [Diagrams](diagrams/)
 
 ### Project status
 
@@ -49,7 +49,7 @@ flowchart LR
     Q[Validate signal and calibration]
     METRICS[Posture, handle-load, pulse, environment]
     RULES[Independent configurable rules]
-    SOS[Confirm/cancel SOS request]
+    SOS[SOS cancel window and retry state]
     MCU --> ACQ --> Q --> METRICS --> RULES
     MCU --> SOS
   end
@@ -171,9 +171,9 @@ The SIM800L path depends on a valid SIM, cellular registration, operator support
 
 - **Posture:** relative angle depends on fixed sensor mounting, axis alignment, neutral calibration, and filtering. A threshold is a configurable reminder, not a universal safe/unsafe boundary.
 - **Handle load:** estimates describe force transferred through the instrumented handle only. They do not measure total object weight when another support carries part of the load, spinal force, shoulder loading, or body biomechanics.
-- **Pulse:** wrist PPG is sensitive to movement, fit, ambient light, and skin contact. Firmware gates estimates on contact, plausible beat intervals, and interval consistency; this does not identify every motion artifact. Invalid or low-quality readings remain unavailable. It is not ECG or a clinical result.
+- **Pulse:** wrist PPG is sensitive to movement, fit, ambient light, and skin contact. Firmware rejects saturated or stale signals and applies a relative signal-amplitude gate plus plausible, consistent beat intervals. These checks reduce some poor readings but do not identify every motion artifact. Invalid or low-quality readings remain unavailable. It is not ECG or a clinical result.
 - **Environment:** SHT31 readings are ambient temperature and relative humidity. They are not core temperature, WBGT, dehydration, or heat-illness measurements.
-- **Communication:** the board contains a 2G SIM800L, not LTE or GNSS. No location is sent. Network acceptance is not proof of delivery, reading, or assistance.
+- **Communication:** the board contains a 2G SIM800L, not LTE or GNSS. No location is sent. Network acceptance is not proof of delivery, reading, or assistance. If a submission response is lost after network acceptance, a bounded retry may produce a duplicate SMS.
 - **Power and mechanics:** runtime, load capacity, measurement accuracy, comfort, and enclosure durability depend on the final assembly and must be evaluated on that assembly.
 
 ## Technical references

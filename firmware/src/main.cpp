@@ -63,7 +63,7 @@ void reportHealth() {
                 latest.health.upperImu ? "ok" : "unavailable",
                 latest.health.pelvisImu ? "ok" : "unavailable",
                 latest.health.environment ? "ok" : "unavailable",
-                latest.health.pulse ? "ready" : "unavailable",
+                latest.health.pulse ? "initialized" : "unavailable",
                 latest.health.leftLoadCell ? "active" : "unavailable",
                 latest.health.leftLoadCalibrated ? "yes" : "no",
                 latest.health.rightLoadCell ? "active" : "unavailable",

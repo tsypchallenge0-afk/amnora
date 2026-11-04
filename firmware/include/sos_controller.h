@@ -16,7 +16,6 @@ class SosController {
  public:
   void trigger(uint32_t nowMs);
   void cancel();
-  void confirm();
   void modemReady(bool ready, uint32_t nowMs);
   void smsResult(bool accepted, uint32_t nowMs);
   void tick(uint32_t nowMs, uint32_t cancelWindowMs, uint32_t retryDelayMs,
@@ -31,6 +30,5 @@ class SosController {
   SosState state_ = SosState::Idle;
   uint32_t deadlineMs_ = 0;
   uint8_t attempts_ = 0;
-  bool confirmed_ = false;
   void scheduleRetryOrFail(uint32_t nowMs);
 };

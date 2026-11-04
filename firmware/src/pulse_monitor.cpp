@@ -33,18 +33,26 @@ ScalarMeasurement PulseMonitor::update(uint32_t nowMs) {
     const uint32_t sampleTimeMs = nowMs -
         static_cast<uint32_t>(sampleCount - 1 - processed) * 10U;
     ++processed;
-    if (ir >= config::PULSE_CONTACT_IR_MIN) {
+    if (ir >= config::PULSE_CONTACT_IR_MIN &&
+        ir < config::PULSE_IR_SATURATION_MAX) {
       lastContactMs_ = sampleTimeMs;
       contactSeen_ = true;
       processIrSample(ir, sampleTimeMs);
+      const float acDcRatio = amplitudeEnvelope_ / baseline_;
+      signalQualityGood_ = isfinite(acDcRatio) &&
+                           acDcRatio <= config::PULSE_MAX_AC_DC_RATIO;
+      if (!signalQualityGood_) resetIntervals();
     } else {
       resetIntervals();
       hasBaseline_ = false;
       contactSeen_ = false;
+      signalQualityGood_ = false;
     }
   }
 
   if (!contactSeen_ || static_cast<uint32_t>(nowMs - lastContactMs_) > kSignalStaleMs ||
+      !signalQualityGood_ || !validBeatSeen_ ||
+      static_cast<uint32_t>(nowMs - lastValidBeatMs_) > kSignalStaleMs ||
       intervalCount_ < 3 || !intervalsAreConsistent()) {
     return {0.0f, nowMs, false};
   }
@@ -74,6 +82,8 @@ void PulseMonitor::processIrSample(uint32_t ir, uint32_t nowMs) {
         intervalsMs_[intervalNext_] = interval;
         intervalNext_ = (intervalNext_ + 1) % 5;
         if (intervalCount_ < 5) ++intervalCount_;
+        lastValidBeatMs_ = nowMs;
+        validBeatSeen_ = true;
       }
     }
     previousBeatMs_ = nowMs;
@@ -87,6 +97,8 @@ void PulseMonitor::resetIntervals() {
   intervalCount_ = 0;
   intervalNext_ = 0;
   previousBeatMs_ = 0;
+  lastValidBeatMs_ = 0;
+  validBeatSeen_ = false;
   aboveBeatThreshold_ = false;
   previousSignal_ = 0.0f;
   amplitudeEnvelope_ = 0.0f;

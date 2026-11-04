@@ -5,15 +5,10 @@ void SosController::trigger(uint32_t nowMs) {
   state_ = SosState::CancelWindow;
   deadlineMs_ = nowMs;
   attempts_ = 0;
-  confirmed_ = false;
 }
 
 void SosController::cancel() {
   if (state_ == SosState::CancelWindow) state_ = SosState::Idle;
-}
-
-void SosController::confirm() {
-  if (state_ == SosState::CancelWindow) confirmed_ = true;
 }
 
 void SosController::modemReady(bool ready, uint32_t nowMs) {
@@ -40,7 +35,7 @@ void SosController::tick(uint32_t nowMs, uint32_t cancelWindowMs,
                          uint32_t retryDelayMs, uint32_t modemTimeoutMs,
                          uint32_t smsTimeoutMs, uint8_t maxAttempts) {
   if (state_ == SosState::CancelWindow &&
-      (confirmed_ || static_cast<uint32_t>(nowMs - deadlineMs_) >= cancelWindowMs)) {
+      static_cast<uint32_t>(nowMs - deadlineMs_) >= cancelWindowMs) {
     state_ = SosState::ModemCheck;
     deadlineMs_ = nowMs;
     attempts_ = 1;
