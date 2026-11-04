@@ -1,0 +1,21 @@
+flowchart LR
+  subgraph Sensors
+    A[Upper-back IMU]
+    B[Pelvis IMU]
+    C[Left load cell + HX711]
+    D[Right load cell + HX711]
+    E[MAX30102]
+    F[SHT31]
+  end
+  A --> G
+  B --> G
+  C --> G
+  D --> G
+  E --> G
+  F --> G
+  G[LILYGO T-Call V1.4 / ESP32]
+  G --> H[Local filtering, calibration, rules]
+  H --> I[Vibration / buzzer / LED]
+  J[SOS / cancel buttons] --> G
+  G --> K[Integrated SIM800L]
+  K --> L[2G SMS network]
