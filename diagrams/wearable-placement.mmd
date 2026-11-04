@@ -1,14 +1,47 @@
 flowchart TB
-  V[Wearable vest]
-  V --> CHEST[Protected chest enclosure: T-Call + controller]
-  V --> BAT[Secured battery at waist / protected rear enclosure]
-  V --> U[Upper IMU between shoulder blades]
-  V --> P[Pelvis IMU on rear support]
-  V --> ENV[SHT31 at ventilated shoulder location]
-  V --> FB[Vibration motor at suitable body-contact point]
-  V --> UI[Visible status LED + guarded SOS/cancel controls]
-  V --> WR[Wrist mount: MAX30102 against bare skin]
-  V --> LH[Detachable left instrumented handle]
-  V --> RH[Detachable right instrumented handle]
-  LH --> L[Load cell + HX711]
-  RH --> R[Load cell + HX711]
+  classDef garment fill:#f2eee8,stroke:#756454,color:#30271f,stroke-width:2px
+  classDef sensor fill:#e8f1ff,stroke:#2463a6,color:#102a43,stroke-width:1.5px
+  classDef control fill:#fff4df,stroke:#b7791f,color:#563b12,stroke-width:1.5px
+  classDef accessory fill:#eef8f0,stroke:#2f855a,color:#173b27,stroke-width:1.5px
+
+  subgraph FRONT[Front of vest]
+    direction TB
+    CHEST[Protected chest enclosure<br/>T-Call + ESP32]:::control
+    LED[Status LED]:::accessory
+    SOS[Guarded SOS button]:::control
+    CANCEL[Separate cancel button]:::control
+    CHEST --- LED
+    CHEST --- SOS
+    SOS --- CANCEL
+  end
+
+  subgraph BACK[Back and waist]
+    direction TB
+    UPPER[Upper IMU<br/>between shoulder blades]:::sensor
+    AMBIENT[Ventilated SHT31<br/>shoulder area]:::sensor
+    PELVIS[Pelvis IMU<br/>fixed to rear support]:::sensor
+    BATTERY[Secured protected battery<br/>waist / lower-back enclosure]:::control
+    HAPTIC[Vibration motor<br/>suitable driver]:::accessory
+    UPPER --- PELVIS
+    PELVIS --- BATTERY
+    BATTERY --- HAPTIC
+  end
+
+  subgraph ACCESSORIES[Detachable sensing accessories]
+    direction LR
+    WRIST[Wrist strap<br/>MAX30102 against skin]:::sensor
+    LEFT[Left instrumented handle<br/>load cell + HX711]:::sensor
+    RIGHT[Right instrumented handle<br/>load cell + HX711]:::sensor
+  end
+
+  GARMENT[Ergonomic vest / support structure]:::garment
+  GARMENT --- CHEST
+  GARMENT --- UPPER
+  GARMENT --- AMBIENT
+  GARMENT --- PELVIS
+  GARMENT --- BATTERY
+  GARMENT --- HAPTIC
+
+  NOTE[Handle force must pass through its load cell.<br/>Handles are separate accessories, not instrumented gloves.]:::control
+  LEFT -. mounting principle .-> NOTE
+  RIGHT -. mounting principle .-> NOTE

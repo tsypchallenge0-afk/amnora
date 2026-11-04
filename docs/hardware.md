@@ -5,7 +5,7 @@
 | Item | Count | Integration notes |
 |---|---:|---|
 | LILYGO T-Call V1.4, SIM800L/IP5306 variant | 1 | Confirm board silkscreen and schematic; SIM800L must be the 2G variant |
-| IMU (MPU6050 or ICM-42670-P; choose one model) | 2 | Upper back and pelvis; verify address selection and bus compatibility |
+| MPU6050 IMU | 2 | Current firmware target; upper back and pelvis at I2C addresses 0x68 and 0x69 |
 | Load cell | 2 | Installed in dedicated load-bearing handle structures |
 | HX711 amplifier | 2 | One per load cell; independent calibration |
 | MAX30102 breakout | 1 | Wrist contact; motion-sensitive optical estimate |
@@ -34,6 +34,30 @@ The official LILYGO repository lists these functions for the SIM800L/IP5306 V1.4
 | 32, 33 | V1.4 modem DTR / RI | Reserved |
 
 The vendor's reference pin list is not a complete guarantee that every other ESP32 GPIO is exposed, free, or safe for every peripheral. The actual assembly and board schematic govern the final mapping.
+
+## I2C address plan
+
+| Device | 7-bit address | Notes |
+|---|---:|---|
+| Upper MPU6050 | 0x68 | AD0 low/default address |
+| Pelvis MPU6050 | 0x69 | Set AD0 high on the second module |
+| SHT31 | 0x44 | Address pin can select 0x45 on supported breakouts |
+| MAX30102 | 0x57 | Confirm the breakout and pull-ups |
+| IP5306 | 0x75 | Onboard power controller on the T-Call design |
+
+The firmware uses the board's GPIO 21/22 I2C lines for the sensor bus, which are also the power-controller bus. Sharing the bus requires compatible pull-up voltage, pull-up strength, device addresses, and total bus capacitance. Inspect the exact board and breakout schematics before connecting every device at once.
+
+## Firmware driver selection
+
+The current PlatformIO target uses the Adafruit MPU6050 and SHT31 drivers, SparkFun MAX3010x device library, and Bogde HX711 library. The T-Call's integrated SIM800L is controlled through a small asynchronous AT-command transport. The firmware's current posture target is a pair of MPU6050 modules; an ICM-42670-P pair requires a corresponding driver and axis configuration change.
+
+HX711 conversion factors are independent. The serial monitor reports raw counts; after tare, apply a known reference mass and calculate:
+
+```text
+counts_per_kg = (raw_counts_with_reference - raw_counts_at_tare) / reference_mass_kg
+```
+
+Set the resulting factors separately in `firmware/include/config.h`. A factor of zero intentionally keeps that channel's kilogram output invalid.
 
 ## Electrical and mechanical checks
 

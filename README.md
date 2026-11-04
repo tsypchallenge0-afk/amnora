@@ -1,128 +1,178 @@
 # AGRI-SAFE
 
-**Wearable workload awareness and emergency communication for agricultural work**
+### A wearable workload-awareness and emergency-support system for agricultural work
 
-AGRI-SAFE is a screen-free wearable concept for women working in Tunisian agriculture. It combines posture and supported-load measurements with ambient sensing, local feedback, and a physical SOS interface. The ESP32 performs local processing; the integrated SIM800L on the LILYGO T-Call V1.4 is reserved for emergency SMS.
+AGRI-SAFE is a screen-free wearable system concept for women working in Tunisia's rural and peri-urban agricultural economy. It brings together posture sensing, load measurement through purpose-built carrying handles, ambient sensing, local feedback, and a physical SOS interface.
 
-> AGRI-SAFE is an ergonomic awareness and safety-support concept. It is not a medical device, does not diagnose illness or predict injury, and cannot guarantee SMS delivery or assistance.
+The system is designed around the **LILYGO T-Call V1.4 with ESP32 and integrated SIM800L**. Measurements are processed locally. The modem is reserved for emergency SMS; the design does not require a phone app, cloud service, display, GPS, or machine-learning model.
 
-## Design goals
+> **Scope:** AGRI-SAFE provides ergonomic workload awareness and a way to request assistance. It is not a medical device, does not diagnose illness or predict injury, and cannot guarantee that an SMS will be delivered or acted upon.
 
-- Make repeated bending and measured handle loads visible to the worker through configurable, task-specific cues.
-- Keep sensing and decision logic local to the ESP32.
-- Provide vibration, buzzer, and LED feedback without requiring a screen or phone.
-- Allow a deliberate SOS request with a cancel window and bounded communication retries.
-- Preserve measurement validity: unavailable or poor-quality signals stay unavailable rather than becoming invented values.
-- Keep the design practical for rural use, including comfort, mounting, power, and maintainability.
+---
 
-## System overview
+## Why AGRI-SAFE
+
+Agricultural and artisanal work can involve repeated bending, manual handling, long work periods, and exposure to hot conditions. AGRI-SAFE focuses on practical indicators that can be measured by a wearable system and used to prompt awareness:
+
+- Relative upper-back and pelvis orientation, with time spent above a configurable posture threshold.
+- Load transferred through two instrumented carrying handles, measured independently on the left and right.
+- Wrist optical pulse estimate when the signal is usable.
+- Ambient temperature and relative humidity.
+- Local vibration, buzzer, and LED cues, plus a guarded SOS/cancel interaction.
+
+The indicators remain separate. The firmware does not combine them into a medical score or universal injury-risk rating.
+
+## System at a glance
 
 ```mermaid
 flowchart LR
-  subgraph Wearable sensors
+  subgraph SENSORS[Wearable and handle sensors]
+    direction TB
     U[Upper-back IMU]
     P[Pelvis IMU]
     L[Left load cell + HX711]
     R[Right load cell + HX711]
-    O[MAX30102 optical pulse]
-    E[SHT31 ambient temperature / RH]
+    H[Wrist MAX30102]
+    E[Ambient SHT31]
   end
-  U --> MCU
-  P --> MCU
-  L --> MCU
-  R --> MCU
-  O --> MCU
-  E --> MCU
-  MCU[LILYGO T-Call V1.4\nESP32 local processing]
-  MCU --> F[Vibration / buzzer / LED]
-  B[SOS + cancel buttons] --> MCU
-  MCU --> M[Integrated SIM800L\n2G SMS]
-  M --> N[Cellular network]
-  N --> C[Configured contact]
+
+  subgraph LOCAL[Local processing - no cloud required]
+    direction TB
+    MCU[LILYGO T-Call V1.4<br/>ESP32 + integrated SIM800L]
+    ACQ[Acquire and timestamp]
+    Q[Validate signal and calibration]
+    METRICS[Posture, handle-load, pulse, environment]
+    RULES[Independent configurable rules]
+    SOS[Confirm/cancel SOS request]
+    MCU --> ACQ --> Q --> METRICS --> RULES
+    MCU --> SOS
+  end
+
+  U --> ACQ
+  P --> ACQ
+  L --> ACQ
+  R --> ACQ
+  H --> ACQ
+  E --> ACQ
+  RULES --> FEEDBACK[Vibration / buzzer / status LED]
+  BUTTONS[Guarded SOS and cancel buttons] --> SOS
+  SOS --> GSM[SIM800L 2G modem]
+  GSM --> SMS[SMS network submission]
+  SMS --> CONTACT[Configured emergency contact]
 ```
 
-See [system architecture](docs/architecture.md), [hardware plan](docs/hardware.md), and [wiring overview](docs/wiring.md).
+The block diagram is also available as [`diagrams/architecture.mmd`](diagrams/architecture.mmd). Component placement is shown in [`diagrams/wearable-placement.mmd`](diagrams/wearable-placement.mmd).
 
-## Baseline components
+## Hardware baseline
 
-| Subsystem | Baseline | Purpose |
+| Function | Component | What it measures or does |
 |---|---|---|
-| Controller / communication | LILYGO TTGO T-Call V1.4, ESP32 + integrated SIM800L | Local processing and 2G SMS |
-| Posture | Two IMUs; select one model for both (MPU6050 or ICM-42670-P) | Relative upper-back / pelvis orientation |
-| Handle load | Two load cells + two HX711 modules | Separate left and right handle load estimates |
-| Pulse | MAX30102 | Quality-gated pulse-rate estimate |
+| Controller and communication | LILYGO T-Call V1.4, ESP32 + SIM800L | Local processing and 2G SMS |
+| Relative posture | Two matching MPU6050 IMUs in the current firmware target | Upper-back orientation relative to pelvis |
+| Handle load | Two load cells + two HX711 modules | Separate force-derived estimates for each instrumented handle |
+| Pulse | MAX30102 | Optical pulse-rate estimate with signal-quality gating |
 | Environment | SHT31 | Ambient temperature and relative humidity |
-| Feedback | Vibration motor with driver, buzzer with suitable driver, status LED | Local, screen-free cues |
-| Interface / power | Guarded SOS and cancel buttons; compatible protected 1-cell battery | Emergency interface and portable power |
+| Worker feedback | Vibration motor, buzzer, LED with suitable drivers | Screen-free local cues |
+| Emergency input | Guarded SOS and cancel buttons | Deliberate request and cancellation window |
+| Power and garment | Compatible protected single-cell battery, vest and enclosures | Portable integration and sensor positioning |
 
-The two instrumented handles are mechanical accessories: the handle force must pass through the load cell. A sensor attached to an ordinary glove does not measure supported container load.
+Two MPU6050 devices use I2C addresses `0x68` and `0x69`; the second device must have its AD0 address strap set accordingly. The project description also allows an ICM-42670-P pair as an alternative hardware direction; that sensor needs a matching driver before selecting it for this firmware target.
 
-## Firmware
+The load cells belong in purpose-built handles. The intended force must pass through each load cell; mounting a sensor on an ordinary glove does not measure container load.
 
-The PlatformIO project in [`firmware/`](firmware/) contains reusable workload and emergency-state logic for the ESP32 Arduino framework. Hardware pin assignments for sensors and actuators are deliberately centralized in `firmware/include/pins.h`; set them only after checking the exact board revision, breakout boards, voltage levels, and mechanical assembly. The T-Call's modem and power-management pins are reserved by the board and must not be reassigned.
+## Wearable layout
 
-The code keeps independent validity flags for measurements. Posture and load alerts are configurable reminders, not universal safety thresholds. The SOS flow distinguishes a command accepted by the modem from SMS delivery or a human response.
+```mermaid
+flowchart TB
+  VEST[Ergonomic vest / support structure]
+  subgraph GARMENT[Wearable placement]
+    direction LR
+    FRONT[Front: protected T-Call enclosure<br/>LED and guarded SOS / cancel controls]
+    UPPER[Back: upper IMU between shoulder blades]
+    PELVIS[Rear support: pelvis IMU]
+    ENV[Ventilated shoulder: SHT31]
+    BATTERY[Secured waist enclosure: protected battery]
+    HAPTIC[Body-contact point: vibration motor]
+  end
+  VEST --- FRONT
+  VEST --- UPPER
+  VEST --- PELVIS
+  VEST --- ENV
+  VEST --- BATTERY
+  VEST --- HAPTIC
+  WRIST[Separate wrist strap: MAX30102 against skin]
+  LEFT[Detachable left instrumented handle]
+  RIGHT[Detachable right instrumented handle]
+```
+
+The [wearable-placement diagram source](diagrams/wearable-placement.mmd) adds the handle load-cell mounting principle.
 
 ## Repository map
 
 ```text
 AGRI-SAFE/
-├── README.md
-├── docs/
-│   ├── architecture.md
-│   ├── hardware.md
-│   └── wiring.md
-├── diagrams/
-│   ├── architecture.mmd
-│   └── wearable-placement.mmd
-└── firmware/
-    ├── platformio.ini
-    ├── include/
-    │   ├── config.h
-    │   ├── pins.h
-    │   └── types.h
-    └── src/
-        ├── main.cpp
-        ├── posture.cpp
-        ├── load_estimator.cpp
-        └── sos_controller.cpp
+|-- README.md
+|-- docs/                  # Architecture, hardware inventory, wiring
+|-- diagrams/              # Mermaid architecture and placement diagrams
+`-- firmware/
+    |-- platformio.ini
+    |-- include/            # Configuration and module interfaces
+    `-- src/                # Sensor, processing, feedback, and SOS modules
 ```
 
-## Build
+## Firmware design
 
-1. Install Visual Studio Code and PlatformIO.
-2. Open `firmware/` as the PlatformIO project.
-3. Confirm the exact T-Call revision and sensor breakout variants.
-4. Assign the unallocated sensor / actuator pins in `include/pins.h` from the board schematic and actual wiring.
-5. Set warning thresholds and the emergency contact in `include/config.h` (keep personal contact details out of public commits).
-6. Build and flash for `esp32dev` with the appropriate board package.
+The ESP32 firmware is organized around small modules rather than one application loop:
 
-The configured contact number is a placeholder. SMS cannot be sent until a valid number, SIM, supported 2G service, and modem setup are configured.
+- **Sensor acquisition:** timestamped IMU, environment, HX711 raw-count, and MAX30102 samples, with per-channel availability.
+- **Posture processing:** complementary orientation filtering, neutral calibration, and dwell tracking.
+- **Load processing:** independent tare and scale calibration for each handle.
+- **Rules and feedback:** separate configurable posture and load reminders.
+- **Input handling:** debounced SOS and cancel controls.
+- **Emergency state machine:** cancellation window, modem readiness check, bounded retry, and distinct "submitted" versus "delivered" semantics.
 
-## Safety and measurement limits
+See [`docs/architecture.md`](docs/architecture.md) for the data path and state transitions. Board-specific modem pins are reserved in [`firmware/include/pins.h`](firmware/include/pins.h); sensor and actuator GPIO choices must be made against the exact board revision and assembled wiring before connection.
 
-- Relative trunk inclination depends on sensor alignment, mounting stability, calibration, and orientation estimation. It is not an injury predictor.
-- HX711 measurements describe force transferred through the instrumented handles only; they do not measure spinal or total body load.
-- MAX30102 pulse estimates can be invalid during motion or poor optical contact; this project does not provide clinical readings.
-- SHT31 measures ambient temperature and humidity, not core temperature, WBGT, dehydration, or heat illness.
-- SIM800L is a 2G modem. Availability depends on the local operator and network. No GPS/GNSS is included.
-- SMS submission is not proof of delivery, reading, or rescue.
-- Battery runtime, sensor accuracy, mechanical capacity, and wearer comfort require measurement and evaluation on the completed assembly.
+### Serial setup and calibration
 
-## Development sequence
+At 115200 baud, the serial monitor accepts:
 
-1. Confirm board revision, sensor variants, component inventory, and electrical limits.
-2. Verify pin availability, I2C addresses, bus sharing, and the modem's peak-current supply.
-3. Bring up and calibrate one subsystem at a time.
-4. Integrate local rules and feedback.
-5. Integrate SOS/SMS with a bounded retry policy.
-6. Evaluate measurement quality, power, mechanics, comfort, and usability under controlled conditions.
+- `c` - capture the relative upper-back/pelvis reference while standing comfortably neutral.
+- `z` - tare each ready handle channel while both handles are unloaded.
+- `?` - print the available commands.
 
-## References
+Telemetry is emitted as one JSON object per line. Raw HX711 counts are included so the two handle channels can be calibrated independently. Compute `counts_per_kg = (loaded_counts - tare_counts) / known_mass_kg`, then set the left and right constants in `firmware/include/config.h`. A zero calibration factor keeps that channel's kilogram value unavailable.
 
-- [LILYGO T-Call SIM800 official repository](https://github.com/Xinyuan-LilyGO/LilyGo-T-Call-SIM800) — board examples, schematics, and revision-specific modem/power pin references.
-- [SIMCom SIM800 series](https://www.simcom.com/product/SIM800.html) — modem family information.
+## Build and configure
+
+1. Install VS Code and the PlatformIO extension.
+2. Open the `firmware/` directory as a PlatformIO project.
+3. Confirm the board is the **SIM800L/IP5306 T-Call V1.4** variant, not a visually similar revision or LTE variant.
+4. Review `firmware/include/pins.h` and assign only exposed, unused pins supported by the board schematic and the actual breakout modules.
+5. Set the two HX711 calibration factors only after calibration with known reference loads. Do not reuse a factor between handles without evidence.
+6. Set task-specific alert thresholds in `firmware/include/config.h`.
+7. Set the emergency number locally. Keep personal phone numbers and SIM credentials out of public commits.
+8. Build and flash using the PlatformIO environment in `firmware/platformio.ini`.
+
+The SIM800L path depends on a valid SIM, cellular registration, operator support for 2G in the work area, and adequate power during transmission. The example contact number is intentionally invalid until locally configured.
+
+## Design constraints and measurement limits
+
+- **Posture:** relative angle depends on fixed sensor mounting, axis alignment, neutral calibration, and filtering. A threshold is a configurable reminder, not a universal safe/unsafe boundary.
+- **Handle load:** estimates describe force transferred through the instrumented handle only. They do not measure total object weight when another support carries part of the load, spinal force, shoulder loading, or body biomechanics.
+- **Pulse:** wrist PPG is sensitive to movement, fit, ambient light, and skin contact. Firmware gates estimates on contact, plausible beat intervals, and interval consistency; this does not identify every motion artifact. Invalid or low-quality readings remain unavailable. It is not ECG or a clinical result.
+- **Environment:** SHT31 readings are ambient temperature and relative humidity. They are not core temperature, WBGT, dehydration, or heat-illness measurements.
+- **Communication:** the board contains a 2G SIM800L, not LTE or GNSS. No location is sent. Network acceptance is not proof of delivery, reading, or assistance.
+- **Power and mechanics:** runtime, load capacity, measurement accuracy, comfort, and enclosure durability depend on the final assembly and must be evaluated on that assembly.
+
+## Technical references
+
+- [LILYGO T-Call SIM800 repository](https://github.com/Xinyuan-LILYGO/LilyGo-T-Call-SIM800) - board variants, examples, pin references, and schematic links.
+- [Adafruit MPU6050 Arduino library](https://github.com/adafruit/Adafruit_MPU6050) - MPU6050 I2C driver used by the firmware.
+- [Adafruit SHT31 Arduino library](https://github.com/adafruit/Adafruit_SHT31) - SHT31 I2C driver.
+- [SparkFun MAX3010x Arduino library](https://github.com/sparkfun/SparkFun_MAX3010x_Sensor_Library) - MAX30102 device access.
+- [Bogde HX711 Arduino library](https://github.com/bogde/HX711) - HX711 ADC interface.
 
 ## License
 
-No license has been selected. Add a license only after the project owner chooses how the work may be reused.
+No reuse license has been selected yet. Add a license after the project owner chooses the terms under which others may reuse the code and documentation.

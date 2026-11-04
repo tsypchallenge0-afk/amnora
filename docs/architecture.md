@@ -1,64 +1,94 @@
-# System architecture
+# AGRI-SAFE system architecture
 
-## Data flow
+AGRI-SAFE keeps sensing, local processing, user feedback, and emergency communication as separate modules. Sensor values retain their own validity and timestamps; one failed sensor does not invalidate unrelated channels.
+
+## Data path
 
 ```mermaid
 flowchart TB
-  subgraph Acquisition
-    IMU1[Upper-back IMU]
-    IMU2[Pelvis IMU]
-    LC1[Left load cell / HX711]
-    LC2[Right load cell / HX711]
-    PPG[MAX30102]
-    ENV[SHT31]
+  subgraph SENSING[Acquisition]
+    IMU[Two MPU6050 IMUs]
+    HX[Two load cells + HX711 modules]
+    OPT[MAX30102 optical sensor]
+    SHT[SHT31 temperature / humidity]
   end
-  subgraph ESP32[ESP32 on T-Call V1.4]
-    DRV[Sensor drivers and timestamps]
-    CAL[Calibration and signal validity]
-    PROC[Posture and load descriptors]
-    RULE[Configurable independent rules]
-    SOS[SOS state machine]
+  subgraph PROCESS[ESP32 workload processing]
+    SH[SensorHub]
+    CAL[Neutral and load calibration]
+    FILTER[Orientation filter and pulse interval quality gate]
+    FEATURES[Relative trunk angle, bending dwell,<br/>left/right handle load, pulse, ambient]
+    RULES[Independent reminder rules]
+    SH --> CAL --> FILTER --> FEATURES --> RULES
   end
-  IMU1 --> DRV
-  IMU2 --> DRV
-  LC1 --> DRV
-  LC2 --> DRV
-  PPG --> DRV
-  ENV --> DRV
-  DRV --> CAL --> PROC --> RULE
-  BTN[SOS / cancel buttons] --> SOS
-  RULE --> OUT[Vibration / buzzer / LED]
-  SOS --> MODEM[Integrated SIM800L]
-  MODEM --> SMS[SMS network submission]
+  IMU --> SH
+  HX --> SH
+  OPT --> SH
+  SHT --> SH
+  RULES --> OUT[Nonblocking feedback scheduler]
+  OUT --> ACT[Vibration / buzzer / status LED]
+  BUTTONS[SOS and cancel inputs] --> DEBOUNCE[Debounced button inputs]
+  DEBOUNCE --> SOS[SOS state machine]
+  subgraph RADIO[Emergency transport]
+    MODEM[SIM800L AT-command transport]
+    CELL[2G cellular network]
+    RECIPIENT[Configured contact]
+    MODEM --> CELL --> RECIPIENT
+  end
+  SOS --> MODEM
 ```
 
-## Separation of responsibilities
+## Firmware modules
 
-1. **Acquisition:** drivers produce timestamped raw samples and sensor-health state.
-2. **Calibration and quality:** apply neutral reference, load tare/calibration factors, and reject invalid or stale readings.
-3. **Descriptors:** calculate relative trunk angle, bending duration, per-handle supported load, pulse estimate when signal quality allows, and ambient conditions.
-4. **Rules:** independently compare valid measurements with configurable task-specific thresholds. No composite medical or injury-risk score is generated.
-5. **Feedback:** schedule nonblocking tactile, audible, and visual patterns.
-6. **Emergency communications:** handle button confirmation/cancellation, modem readiness, bounded SMS submission attempts, and user feedback.
+| Module | Responsibility |
+|---|---|
+| `SensorHub` | Initializes the I2C sensors, samples the two IMUs and SHT31, reads available HX711 channels, and reports pulse measurements. |
+| `ComplementaryAngleFilter` | Blends accelerometer angle with gyro rate for the configured sagittal axis. |
+| `RelativePostureCalibration` | Captures the upper-back to pelvis offset in a comfortable neutral stance. |
+| `PostureTracker` | Tracks continuous dwell above the warning threshold, using a lower release threshold to reduce alert chatter. |
+| `LoadEstimator` | Converts tared raw HX711 counts using a separately calibrated counts-per-kilogram factor for each handle. |
+| `PulseMonitor` | Reads MAX30102 IR samples, detects candidate beat intervals, and only exposes a median estimate when intervals are plausible and consistent. |
+| `FeedbackController` | Schedules tactile, audible, and LED pulses without delay loops. |
+| `Sim800lTransport` | Performs power-on, network registration query, text-mode SMS submission, response parsing, and command timeouts without blocking. |
+| `SosController` | Owns the cancel window, bounded attempts, modem/SMS timeouts, and communication state. |
+| `ButtonDebouncer` | Emits stable press transitions for the guarded physical SOS and cancel switches. |
 
-## Emergency sequence
+## Sampling and calibration
+
+- The main scheduler requests a sensor frame every 50 ms.
+- The SHT31 is read once per second and marked stale if no fresh value is available.
+- Two MPU6050 devices use addresses `0x68` and `0x69`; the pelvis unit needs the alternate AD0 address.
+- Enter `c` in the serial monitor while standing comfortably neutral to capture the relative IMU reference.
+- Enter `z` with the instrumented handles unloaded to capture tare. Each HX711 channel also needs its own calibrated counts-per-kilogram constant.
+- The MAX30102 sample rate is configured to 100 Hz. The pulse interval detector rejects missing contact, implausible intervals, and inconsistent short interval windows. It cannot reliably identify every motion artifact because the design has no wrist-mounted motion sensor.
+
+## SOS sequence
 
 ```mermaid
 stateDiagram-v2
   [*] --> Idle
-  Idle --> CancelWindow: guarded SOS press
-  CancelWindow --> Idle: cancel press
-  CancelWindow --> ModemCheck: timeout / explicit confirm
-  ModemCheck --> Submitting: modem ready and network registered
-  ModemCheck --> Failed: modem/network unavailable
-  Submitting --> Submitted: modem reports submission accepted
-  Submitting --> RetryWait: explicit submission failure, retries remain
-  RetryWait --> ModemCheck: retry timer expires
-  Submitting --> Failed: timeout / retry limit reached
-  Submitted --> Idle: report submitted; delivery unconfirmed
-  Failed --> Idle: report failure locally
+  Idle --> CancelWindow: debounced physical SOS press
+  CancelWindow --> Idle: debounced cancel press
+  CancelWindow --> ModemCheck: cancel window expires
+  ModemCheck --> Submitting: SIM registered
+  ModemCheck --> RetryWait: registration failure / timeout
+  Submitting --> Submitted: modem returns +CMGS and OK
+  Submitting --> RetryWait: SMS error / response timeout
+  RetryWait --> ModemCheck: retry delay; attempts remain
+  RetryWait --> Failed: retry limit reached
+  Submitted --> Idle: next emergency request
+  Failed --> Idle: next emergency request
 ```
 
-## Measurement validity
+`Submitted` means the modem/network accepted the submission response. It does not mean the recipient's handset received, displayed, or was answered by the SMS. The message explicitly states that the device has no GPS location capability.
 
-Every sensor channel has a validity state and timestamp. A missing or poor-quality signal is marked unavailable. Sensor failure must not be converted to a normal-looking number. Pulse-rate quality gating and sensor drivers are explicit extension points for the selected libraries and breakout revisions.
+The transport sequence is `AT` -> `AT+CREG?` -> `AT+CMGF=1` -> `AT+CMGS="number"` -> message body plus Ctrl-Z. Each waiting state has a deadline. Recipient text is restricted to a plus sign followed by digits, and the message buffer rejects control characters that could terminate the SMS unexpectedly.
+
+Feedback uses short nonblocking pulse patterns. Posture and load reminders trigger on the transition into an alert, while the SOS and modem events use their own patterns. The board LED is treated separately from the external motor and buzzer driver outputs.
+
+## Failure behavior
+
+- Sensor init or read failure invalidates that channel and leaves other channels running.
+- An uncalibrated load channel stays unavailable; raw counts are not presented as kilograms.
+- Invalid or stale pulse samples stay unavailable; the application does not synthesize a value.
+- Modem errors and timeouts return to a bounded retry path. Local monitoring continues while modem replies are pending.
+- The public default emergency number is intentionally invalid; configure a real contact privately before any live SOS use.

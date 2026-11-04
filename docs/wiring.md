@@ -1,13 +1,13 @@
 # Wiring overview
 
-This is a functional connection architecture, not a final pin-by-pin harness. Fill GPIO values in `firmware/include/pins.h` only after checking the exact T-Call V1.4 schematic, exposed headers, breakout voltage levels, and board reservations in [hardware.md](hardware.md).
+The sensor I2C lines in firmware use the T-Call's GPIO 21/22 pair, which is already used by the onboard IP5306 power controller. The remaining HX711 and actuator/button GPIOs stay disabled (`-1`) until the exact board schematic, exposed headers, and breakout voltage levels have been checked. See the address plan in [hardware.md](hardware.md).
 
 | Peripheral | Signal connections | Power / grounding | Notes |
 |---|---|---|---|
-| Upper-back IMU | Shared I2C SDA/SCL | Compatible logic rail; common ground | Configure address and orientation axis |
-| Pelvis IMU | Same I2C bus if unique address | Compatible logic rail; common ground | MPU6050 requires distinct address from first IMU |
-| MAX30102 | I2C SDA/SCL | Follow breakout specification | Typically address 0x57; ensure no conflict |
-| SHT31 | I2C SDA/SCL | Follow breakout specification | Verify address straps and pull-ups |
+| Upper-back MPU6050 | GPIO 21 SDA, GPIO 22 SCL | Compatible logic rail; common ground | Address 0x68; fixed mounting axis |
+| Pelvis MPU6050 | Same GPIO 21/22 bus | Compatible logic rail; common ground | Address 0x69; AD0 strap high |
+| MAX30102 | Same GPIO 21/22 bus | Follow breakout specification | Address 0x57; verify pull-ups |
+| SHT31 | Same GPIO 21/22 bus | Follow breakout specification | Address 0x44, alternate 0x45 if set |
 | HX711 left | DOUT + SCK to two selected GPIOs | Module supply per its specification | One amplifier per load cell |
 | HX711 right | DOUT + SCK to two selected GPIOs | Module supply per its specification | Separate channel/calibration |
 | Vibration motor | GPIO to driver input | Motor supply sized for motor; common ground as topology requires | Never connect motor directly to a GPIO |
@@ -39,3 +39,13 @@ flowchart LR
 ```
 
 All grounds and power domains must follow the exact breakout and board specifications. Avoid connecting components until the supply voltage, logic compatibility, GPIO assignment, and current budget have been checked.
+
+## Firmware calibration controls
+
+With the PlatformIO serial monitor at 115200 baud:
+
+- Send `c` while the wearer stands in a comfortable neutral posture to capture the relative IMU offset.
+- Send `z` while both instrumented handles are unloaded to tare each ready HX711 channel.
+- JSON telemetry includes raw HX711 counts for calibration. Use the known-mass formula in [hardware.md](hardware.md), then enter a separate counts-per-kilogram factor for each handle in `firmware/include/config.h`.
+
+The SOS trigger is accepted only from the configured physical button pins. The public firmware defaults leave those pins unset, and the public emergency phone number is a non-routable placeholder.

@@ -14,10 +14,13 @@ constexpr int POWER_I2C_SDA = 21;
 constexpr int POWER_I2C_SCL = 22;
 constexpr int BOARD_LED = 13;
 
-// Assign after validating the actual board schematic and connected peripherals.
-// Keep -1 until a verified, exposed, unused GPIO is selected for each signal.
-constexpr int IMU_I2C_SDA = -1;
-constexpr int IMU_I2C_SCL = -1;
+// The T-Call power IC already uses this I2C bus. Sensor sharing is valid only
+// when the assembled bus pull-ups, addresses, logic levels, and capacitance suit it.
+constexpr int SENSOR_I2C_SDA = POWER_I2C_SDA;
+constexpr int SENSOR_I2C_SCL = POWER_I2C_SCL;
+
+// Assign these only after checking the exact board schematic and harness.
+// -1 disables the associated input/output safely in firmware.
 constexpr int HX711_LEFT_DOUT = -1;
 constexpr int HX711_LEFT_SCK = -1;
 constexpr int HX711_RIGHT_DOUT = -1;

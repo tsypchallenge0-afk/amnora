@@ -1,21 +1,51 @@
 flowchart LR
-  subgraph Sensors
-    A[Upper-back IMU]
-    B[Pelvis IMU]
-    C[Left load cell + HX711]
-    D[Right load cell + HX711]
-    E[MAX30102]
-    F[SHT31]
+  classDef sensor fill:#e8f1ff,stroke:#2463a6,color:#102a43,stroke-width:1.5px
+  classDef process fill:#eef8f0,stroke:#2f855a,color:#173b27,stroke-width:1.5px
+  classDef alert fill:#fff4df,stroke:#b7791f,color:#563b12,stroke-width:1.5px
+  classDef comm fill:#f3e8ff,stroke:#805ad5,color:#32224d,stroke-width:1.5px
+  classDef caveat fill:#fff0f0,stroke:#c53030,color:#5a1a1a,stroke-dasharray:4 3
+
+  subgraph INPUTS[Sensor inputs]
+    direction TB
+    IMU[Upper-back + pelvis IMUs<br/>I2C: 0x68 / 0x69]
+    LOAD[Two handle load cells<br/>HX711 x 2]
+    PPG[MAX30102<br/>I2C: 0x57]
+    ENV[SHT31<br/>I2C: 0x44]
+    BUTTONS[Guarded SOS + cancel buttons]
   end
-  A --> G
-  B --> G
-  C --> G
-  D --> G
-  E --> G
-  F --> G
-  G[LILYGO T-Call V1.4 / ESP32]
-  G --> H[Local filtering, calibration, rules]
-  H --> I[Vibration / buzzer / LED]
-  J[SOS / cancel buttons] --> G
-  G --> K[Integrated SIM800L]
-  K --> L[2G SMS network]
+
+  subgraph DEVICE[LILYGO T-Call V1.4]
+    direction TB
+    ESP[ESP32 local controller]
+    ACQ[Timestamped acquisition<br/>sensor health]
+    QUALITY[Calibration + validity checks]
+    FEATURES[Relative angle, dwell, per-handle load,<br/>pulse estimate, ambient conditions]
+    RULES[Independent configurable reminders]
+    SOS[SOS confirmation + retry state machine]
+    FEEDBACK[Vibration / buzzer / LED scheduler]
+    ESP --> ACQ --> QUALITY --> FEATURES --> RULES
+    ESP --> SOS
+    RULES --> FEEDBACK
+  end
+
+  IMU --> ACQ
+  LOAD --> ACQ
+  PPG --> ACQ
+  ENV --> ACQ
+  BUTTONS --> SOS
+
+  subgraph COMMS[Emergency communication]
+    direction LR
+    MODEM[Integrated SIM800L<br/>2G GSM]
+    NETWORK[Mobile network]
+    PERSON[Configured contact]
+    MODEM --> NETWORK --> PERSON
+  end
+  SOS --> MODEM
+  RESULT[Submission status is not delivery confirmation]:::caveat
+  MODEM -. status limit .-> RESULT
+
+  class IMU,LOAD,PPG,ENV,BUTTONS sensor
+  class ESP,ACQ,QUALITY,FEATURES process
+  class RULES,FEEDBACK alert
+  class SOS,MODEM,NETWORK,PERSON comm
