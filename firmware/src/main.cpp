@@ -28,7 +28,7 @@ bool previousLoadReminder = false;
 CalibrationStatus previousNeutralCalibrationStatus = CalibrationStatus::Idle;
 CalibrationStatus previousTareCalibrationStatus = CalibrationStatus::Idle;
 constexpr char kEmergencyMessage[] =
-    "AGRI-SAFE emergency request. Please contact the worker. This device has no GPS location.";
+    "Amnora emergency request. Please contact the worker. This device has no GPS location.";
 
 void printHelp() {
   Serial.println(F("Commands: c = average neutral posture; z = average tare unloaded handles; ? = help"));

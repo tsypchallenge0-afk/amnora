@@ -1,12 +1,12 @@
-# AGRI-SAFE
+# Amnora
 
 **A wearable workload-awareness and emergency-support system for agricultural work**
 
-AGRI-SAFE is a screen-free wearable system concept for women working in Tunisia's rural and peri-urban agricultural economy. It brings together posture sensing, load measurement through purpose-built carrying handles, ambient sensing, local feedback, and a physical SOS interface.
+Amnora is a screen-free wearable system concept for women working in Tunisia's rural and peri-urban agricultural economy. It brings together posture sensing, load measurement through purpose-built carrying handles, ambient sensing, local feedback, and a physical SOS interface.
 
 The system is designed around the **LILYGO T-Call V1.4 with ESP32 and integrated SIM800L**. Measurements are processed locally. The modem is reserved for emergency SMS; the design does not require a phone app, cloud service, display, GPS, or machine-learning model.
 
-> **Scope:** AGRI-SAFE provides ergonomic workload awareness and a way to request assistance. It is not a medical device, does not diagnose illness or predict injury, and cannot guarantee that an SMS will be delivered or acted upon.
+> **Scope:** Amnora provides ergonomic workload awareness and a way to request assistance. It is not a medical device, does not diagnose illness or predict injury, and cannot guarantee that an SMS will be delivered or acted upon.
 
 [Architecture](docs/architecture.md) | [Hardware](docs/hardware.md) | [Wiring](docs/wiring.md) | [Firmware](firmware/) | [Diagrams](diagrams/)
 
@@ -16,9 +16,9 @@ The repository contains the ESP32 firmware modules, system documentation, and de
 
 ---
 
-## Why AGRI-SAFE
+## Why Amnora
 
-Agricultural and artisanal work can involve repeated bending, manual handling, long work periods, and exposure to hot conditions. AGRI-SAFE focuses on practical indicators that can be measured by a wearable system and used to prompt awareness:
+Agricultural and artisanal work can involve repeated bending, manual handling, long work periods, and exposure to hot conditions. Amnora focuses on practical indicators that can be measured by a wearable system and used to prompt awareness:
 
 - Relative upper-back and pelvis orientation, with time spent above a configurable posture threshold.
 - Load transferred through two instrumented carrying handles, measured independently on the left and right.
@@ -116,7 +116,7 @@ The [wearable-placement diagram source](diagrams/wearable-placement.mmd) adds th
 ## Repository map
 
 ```text
-AGRI-SAFE/
+Amnora/
 |-- README.md
 |-- docs/                  # Architecture, hardware inventory, wiring
 |-- diagrams/              # Mermaid architecture and placement diagrams

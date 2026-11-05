@@ -1,6 +1,6 @@
-# AGRI-SAFE system architecture
+# Amnora system architecture
 
-AGRI-SAFE keeps sensing, local processing, user feedback, and emergency communication as separate modules. Sensor values retain their own validity and timestamps; one failed sensor does not invalidate unrelated channels.
+Amnora keeps sensing, local processing, user feedback, and emergency communication as separate modules. Sensor values retain their own validity and timestamps; one failed sensor does not invalidate unrelated channels.
 
 ## Data path
 
