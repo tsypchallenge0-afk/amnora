@@ -184,6 +184,3 @@ The SIM800L path depends on a valid SIM, cellular registration, operator support
 - [SparkFun MAX3010x Arduino library](https://github.com/sparkfun/SparkFun_MAX3010x_Sensor_Library) - MAX30102 device access.
 - [Bogde HX711 Arduino library](https://github.com/bogde/HX711) - HX711 ADC interface.
 
-## License
-
-No reuse license has been selected yet. Add a license after the project owner chooses the terms under which others may reuse the code and documentation.
