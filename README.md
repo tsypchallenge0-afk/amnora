@@ -183,4 +183,3 @@ The SIM800L path depends on a valid SIM, cellular registration, operator support
 - [Adafruit SHT31 Arduino library](https://github.com/adafruit/Adafruit_SHT31) - SHT31 I2C driver.
 - [SparkFun MAX3010x Arduino library](https://github.com/sparkfun/SparkFun_MAX3010x_Sensor_Library) - MAX30102 device access.
 - [Bogde HX711 Arduino library](https://github.com/bogde/HX711) - HX711 ADC interface.
-
